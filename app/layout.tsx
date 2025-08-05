@@ -74,13 +74,13 @@ export default function RootLayout({
                         <Target className="h-4 w-4" />
                         <span>Goals</span>
                       </Link>
-                      <Link
-                        href="/import-export"
-                        className="flex items-center space-x-2 text-sm font-medium hover:text-primary"
-                      >
-                        <Upload className="h-4 w-4" />
-                        <span>Import/Export</span>
-                      </Link>
+//                      <Link
+//                        href="/import-export"
+//                        className="flex items-center space-x-2 text-sm font-medium hover:text-primary"
+//                      >
+//                        <Upload className="h-4 w-4" />
+//                        <span>Import/Export</span>
+//                      </Link>
                     </div>
                   </div>
                   <ThemeToggle />

@@ -34,11 +34,11 @@ const navigationItems = [
     href: "/goals",
     icon: Target,
   },
-  {
-    title: "Import/Export",
-    href: "/import-export",
-    icon: Upload,
-  },
+//  {
+//    title: "Import/Export",
+//    href: "/import-export",
+//    icon: Upload,
+//  },
 ]
 
 export function MobileNav() {
