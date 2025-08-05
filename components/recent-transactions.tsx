@@ -41,24 +41,37 @@ export function RecentTransactions({
   className = "",
 }: RecentTransactionsProps) {
   const getAccountName = (accountId: string) => {
-    const account = accounts.find((a) => a.id === accountId)
-    return account ? account.name : "Unknown Account"
+    if (!Array.isArray(accounts) || !accountId) return "Unknown Account"
+    const account = accounts.find((a) => a && a.id === accountId)
+    return account ? String(account.name || "Unknown Account") : "Unknown Account"
   }
 
-  const recentTransactions = transactions
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  const safeTransactions = Array.isArray(transactions) ? transactions.filter((t) => t && t.id && t.date) : []
+
+  const recentTransactions = safeTransactions
+    .sort((a, b) => {
+      const dateA = new Date(a.date || "1970-01-01").getTime()
+      const dateB = new Date(b.date || "1970-01-01").getTime()
+      return dateB - dateA
+    })
     .slice(0, limit)
 
   const formatRelativeDate = (dateString: string) => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffTime = now.getTime() - date.getTime()
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+    if (!dateString) return "Unknown date"
 
-    if (diffDays === 0) return "Today"
-    if (diffDays === 1) return "Yesterday"
-    if (diffDays < 7) return `${diffDays} days ago`
-    return date.toLocaleDateString()
+    try {
+      const date = new Date(dateString)
+      const now = new Date()
+      const diffTime = now.getTime() - date.getTime()
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+
+      if (diffDays === 0) return "Today"
+      if (diffDays === 1) return "Yesterday"
+      if (diffDays < 7) return `${diffDays} days ago`
+      return date.toLocaleDateString()
+    } catch (error) {
+      return "Unknown date"
+    }
   }
 
   return (
@@ -98,16 +111,18 @@ export function RecentTransactions({
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{transaction.description || transaction.category}</p>
+                  <p className="text-sm font-medium truncate">
+                    {String(transaction.description || transaction.category || "Unknown transaction")}
+                  </p>
                   <p className="text-sm text-muted-foreground">
-                    {transaction.category} • {getAccountName(transaction.accountId)}
+                    {String(transaction.category || "Unknown")} • {getAccountName(transaction.accountId)}
                   </p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
                 <div className="text-right">
                   <p className={`text-sm font-semibold transaction-amount ${transaction.type}`}>
-                    {transaction.type === "income" ? "+" : "-"}${transaction.amount.toFixed(2)}
+                    {transaction.type === "income" ? "+" : "-"}${(Number(transaction.amount) || 0).toFixed(2)}
                   </p>
                   <p className="text-xs text-muted-foreground">{formatRelativeDate(transaction.date)}</p>
                 </div>
