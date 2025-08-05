@@ -2,9 +2,8 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { ArrowUpRight, ArrowDownRight, MoreHorizontal, Clock } from "lucide-react"
 import Link from "next/link"
-import { ArrowUpRight, ArrowDownRight, ArrowRightLeft, Clock } from "lucide-react"
 
 interface Account {
   id: string
@@ -46,50 +45,6 @@ export function RecentTransactions({
     return account ? account.name : "Unknown Account"
   }
 
-  const getTransactionIcon = (type: string) => {
-    switch (type) {
-      case "income":
-        return <ArrowDownRight className="h-4 w-4 text-green-600" />
-      case "expense":
-        return <ArrowUpRight className="h-4 w-4 text-red-600" />
-      case "transfer":
-        return <ArrowRightLeft className="h-4 w-4 text-blue-600" />
-      default:
-        return <Clock className="h-4 w-4 text-gray-600" />
-    }
-  }
-
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case "income":
-        return "bg-green-100 text-green-800"
-      case "expense":
-        return "bg-red-100 text-red-800"
-      case "transfer":
-        return "bg-blue-100 text-blue-800"
-      default:
-        return "bg-gray-100 text-gray-800"
-    }
-  }
-
-  const formatAmount = (amount: number, type: string) => {
-    const prefix = type === "expense" ? "-" : ""
-    return `${prefix}$${amount.toFixed(2)}`
-  }
-
-  const getAmountColor = (type: string) => {
-    switch (type) {
-      case "income":
-        return "text-green-600"
-      case "expense":
-        return "text-red-600"
-      case "transfer":
-        return "text-blue-600"
-      default:
-        return "text-gray-600"
-    }
-  }
-
   const recentTransactions = transactions
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, limit)
@@ -115,7 +70,7 @@ export function RecentTransactions({
               <Clock className="h-5 w-5" />
               Recent Transactions
             </CardTitle>
-            <CardDescription>Your latest financial activity</CardDescription>
+            <CardDescription>Your latest financial activities</CardDescription>
           </div>
           {showViewAll && (
             <Link href="/transactions">
@@ -127,37 +82,38 @@ export function RecentTransactions({
         </CardHeader>
       )}
       <CardContent>
-        <div className="space-y-3">
+        <div className="space-y-4">
           {recentTransactions.map((transaction) => (
-            <div
-              key={transaction.id}
-              className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <div className="flex items-center space-x-3">
-                <div className="flex-shrink-0">{getTransactionIcon(transaction.type)}</div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="font-medium truncate">{transaction.description || transaction.category}</p>
-                    <Badge className={`${getTypeColor(transaction.type)} text-xs`}>{transaction.type}</Badge>
-                  </div>
-                  <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                    <span className="truncate">{getAccountName(transaction.accountId)}</span>
-                    <span>•</span>
-                    <span className="truncate">{transaction.category}</span>
-                    {transaction.subcategory && (
-                      <>
-                        <span>•</span>
-                        <span className="truncate">{transaction.subcategory}</span>
-                      </>
-                    )}
-                  </div>
+            <div key={transaction.id} className="transaction-item">
+              <div className="flex items-center space-x-4">
+                <div
+                  className={`p-2 rounded-full ${
+                    transaction.type === "income" ? "bg-green-100 dark:bg-green-900" : "bg-red-100 dark:bg-red-900"
+                  }`}
+                >
+                  {transaction.type === "income" ? (
+                    <ArrowUpRight className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  ) : (
+                    <ArrowDownRight className="h-4 w-4 text-red-600 dark:text-red-400" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{transaction.description || transaction.category}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {transaction.category} • {getAccountName(transaction.accountId)}
+                  </p>
                 </div>
               </div>
-              <div className="text-right flex-shrink-0 ml-4">
-                <p className={`font-semibold ${getAmountColor(transaction.type)}`}>
-                  {formatAmount(transaction.amount, transaction.type)}
-                </p>
-                <p className="text-sm text-muted-foreground">{formatRelativeDate(transaction.date)}</p>
+              <div className="flex items-center space-x-2">
+                <div className="text-right">
+                  <p className={`text-sm font-semibold transaction-amount ${transaction.type}`}>
+                    {transaction.type === "income" ? "+" : "-"}${transaction.amount.toFixed(2)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{formatRelativeDate(transaction.date)}</p>
+                </div>
+                <Button variant="ghost" size="sm">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           ))}
