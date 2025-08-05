@@ -1,245 +1,632 @@
 "use client"
 
+import type React from "react"
+
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, Target, Calendar, DollarSign } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Plus, Edit, Trash2, ArrowLeft, Wallet, Target, DollarSign } from "lucide-react"
+import Link from "next/link"
+import { ThemeToggle } from "@/components/theme-toggle"
+
+interface Account {
+  id: string
+  name: string
+  balance: number
+  type: "checking" | "savings" | "credit" | "investment"
+}
+
+interface SavingsGoal {
+  id: string
+  name: string
+  targetAmount: number
+  currentAmount: number
+  deadline: string
+  trackingMode: "manual" | "account"
+  trackedAccountId?: string
+}
 
 export default function GoalsPage() {
-  const goals = [
-    {
-      id: 1,
-      name: "Emergency Fund",
-      description: "Build an emergency fund for unexpected expenses",
-      targetAmount: 10000,
-      currentAmount: 7500,
-      targetDate: "2024-12-31",
-      category: "Safety Net",
-      priority: "High",
-    },
-    {
-      id: 2,
-      name: "Vacation to Europe",
-      description: "Save for a 2-week trip to Europe",
-      targetAmount: 5000,
-      currentAmount: 2800,
-      targetDate: "2024-08-15",
-      category: "Travel",
-      priority: "Medium",
-    },
-    {
-      id: 3,
-      name: "New Car Down Payment",
-      description: "Save for a down payment on a new car",
-      targetAmount: 8000,
-      currentAmount: 3200,
-      targetDate: "2024-10-01",
-      category: "Transportation",
-      priority: "Medium",
-    },
-    {
-      id: 4,
-      name: "Home Renovation",
-      description: "Kitchen and bathroom renovation project",
-      targetAmount: 15000,
-      currentAmount: 5500,
-      targetDate: "2025-03-01",
-      category: "Home",
-      priority: "Low",
-    },
-  ]
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([])
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [editingGoal, setEditingGoal] = useState<SavingsGoal | null>(null)
+  const [contributionDialogGoal, setContributionDialogGoal] = useState<SavingsGoal | null>(null)
+  const [contributionAmount, setContributionAmount] = useState("")
+  const [newGoal, setNewGoal] = useState({
+    name: "",
+    targetAmount: "",
+    deadline: "",
+    trackingMode: "manual" as "manual" | "account",
+    trackedAccountId: "",
+  })
 
-  const totalTargetAmount = goals.reduce((sum, goal) => sum + goal.targetAmount, 0)
-  const totalCurrentAmount = goals.reduce((sum, goal) => sum + goal.currentAmount, 0)
-  const overallProgress = (totalCurrentAmount / totalTargetAmount) * 100
+  useEffect(() => {
+    const savedAccounts = localStorage.getItem("money-manager-accounts")
+    const savedGoals = localStorage.getItem("money-manager-goals")
+    if (savedAccounts) setAccounts(JSON.parse(savedAccounts))
+    if (savedGoals) {
+      const goals = JSON.parse(savedGoals)
+      // Update account-tracked goals with current account balances
+      const updatedGoals = goals.map((goal: SavingsGoal) => {
+        if (goal.trackingMode === "account" && goal.trackedAccountId) {
+          const account = JSON.parse(savedAccounts || "[]").find((acc: Account) => acc.id === goal.trackedAccountId)
+          if (account) {
+            return { ...goal, currentAmount: account.balance }
+          }
+        }
+        return goal
+      })
+      setSavingsGoals(updatedGoals)
+      if (JSON.stringify(goals) !== JSON.stringify(updatedGoals)) {
+        localStorage.setItem("money-manager-goals", JSON.stringify(updatedGoals))
+      }
+    }
+  }, [])
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "High":
-        return "text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900"
-      case "Medium":
-        return "text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900"
-      case "Low":
-        return "text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900"
-      default:
-        return "text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-900"
+  const saveGoals = (updatedGoals: SavingsGoal[]) => {
+    setSavingsGoals(updatedGoals)
+    localStorage.setItem("money-manager-goals", JSON.stringify(updatedGoals))
+  }
+
+  const handleAddGoal = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newGoal.name || !newGoal.targetAmount || !newGoal.deadline) return
+
+    let currentAmount = 0
+    if (newGoal.trackingMode === "account" && newGoal.trackedAccountId) {
+      const account = accounts.find((acc) => acc.id === newGoal.trackedAccountId)
+      currentAmount = account?.balance || 0
+    }
+
+    const goal: SavingsGoal = {
+      id: Date.now().toString(),
+      name: newGoal.name,
+      targetAmount: Number.parseFloat(newGoal.targetAmount),
+      currentAmount,
+      deadline: newGoal.deadline,
+      trackingMode: newGoal.trackingMode,
+      trackedAccountId: newGoal.trackingMode === "account" ? newGoal.trackedAccountId : undefined,
+    }
+
+    saveGoals([...savingsGoals, goal])
+    setNewGoal({
+      name: "",
+      targetAmount: "",
+      deadline: "",
+      trackingMode: "manual",
+      trackedAccountId: "",
+    })
+    setIsAddDialogOpen(false)
+  }
+
+  const handleEditGoal = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingGoal || !newGoal.name || !newGoal.targetAmount || !newGoal.deadline) return
+
+    let currentAmount = editingGoal.currentAmount
+    if (newGoal.trackingMode === "account" && newGoal.trackedAccountId) {
+      const account = accounts.find((acc) => acc.id === newGoal.trackedAccountId)
+      currentAmount = account?.balance || 0
+    }
+
+    const updatedGoals = savingsGoals.map((goal) =>
+      goal.id === editingGoal.id
+        ? {
+            ...goal,
+            name: newGoal.name,
+            targetAmount: Number.parseFloat(newGoal.targetAmount),
+            currentAmount,
+            deadline: newGoal.deadline,
+            trackingMode: newGoal.trackingMode,
+            trackedAccountId: newGoal.trackingMode === "account" ? newGoal.trackedAccountId : undefined,
+          }
+        : goal,
+    )
+
+    saveGoals(updatedGoals)
+    setEditingGoal(null)
+    setNewGoal({
+      name: "",
+      targetAmount: "",
+      deadline: "",
+      trackingMode: "manual",
+      trackedAccountId: "",
+    })
+  }
+
+  const handleDeleteGoal = (goalId: string) => {
+    if (confirm("Are you sure you want to delete this savings goal?")) {
+      const updatedGoals = savingsGoals.filter((goal) => goal.id !== goalId)
+      saveGoals(updatedGoals)
     }
   }
 
-  const getTimeRemaining = (targetDate: string) => {
-    const target = new Date(targetDate)
-    const now = new Date()
-    const diffTime = target.getTime() - now.getTime()
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  const handleAddContribution = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!contributionDialogGoal || !contributionAmount) return
 
-    if (diffDays < 0) return "Overdue"
-    if (diffDays === 0) return "Due today"
-    if (diffDays === 1) return "1 day left"
-    if (diffDays < 30) return `${diffDays} days left`
-    if (diffDays < 365) return `${Math.ceil(diffDays / 30)} months left`
-    return `${Math.ceil(diffDays / 365)} years left`
+    const updatedGoals = savingsGoals.map((goal) =>
+      goal.id === contributionDialogGoal.id
+        ? { ...goal, currentAmount: goal.currentAmount + Number.parseFloat(contributionAmount) }
+        : goal,
+    )
+
+    saveGoals(updatedGoals)
+    setContributionDialogGoal(null)
+    setContributionAmount("")
+  }
+
+  const openEditDialog = (goal: SavingsGoal) => {
+    setEditingGoal(goal)
+    setNewGoal({
+      name: goal.name,
+      targetAmount: goal.targetAmount.toString(),
+      deadline: goal.deadline,
+      trackingMode: goal.trackingMode,
+      trackedAccountId: goal.trackedAccountId || "",
+    })
+  }
+
+  const getGoalStatus = (goal: SavingsGoal) => {
+    const progress = (goal.currentAmount / goal.targetAmount) * 100
+    const deadline = new Date(goal.deadline)
+    const today = new Date()
+    const isOverdue = deadline < today && progress < 100
+
+    if (progress >= 100) return { status: "completed", color: "text-green-600" }
+    if (isOverdue) return { status: "overdue", color: "text-red-600" }
+    return { status: "in-progress", color: "text-blue-600" }
+  }
+
+  const getTrackedAccount = (goal: SavingsGoal) => {
+    if (goal.trackingMode === "account" && goal.trackedAccountId) {
+      return accounts.find((acc) => acc.id === goal.trackedAccountId)
+    }
+    return null
   }
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Savings Goals</h1>
-          <p className="text-muted-foreground">Track your progress towards financial goals</p>
-        </div>
-        <Button className="flex items-center gap-2">
-          <Plus className="h-4 w-4" />
-          Add Goal
-        </Button>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid gap-6 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Goals</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{goals.length}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Target Amount</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${totalTargetAmount.toLocaleString()}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Saved So Far</CardTitle>
-            <DollarSign className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-              ${totalCurrentAmount.toLocaleString()}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Overall Progress</CardTitle>
-            <Target className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{overallProgress.toFixed(1)}%</div>
-            <div className="mt-2">
-              <div className="progress-bar">
-                <div className="progress-fill savings-progress" style={{ width: `${overallProgress}%` }} />
+    <div className="min-h-screen bg-background">
+      <nav className="bg-card shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center space-x-4">
+              <Link href="/">
+                <Button variant="ghost" size="sm">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Dashboard
+                </Button>
+              </Link>
+              <div className="flex items-center">
+                <Wallet className="h-8 w-8 text-blue-600" />
+                <span className="ml-2 text-xl font-bold">Money Manager</span>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Goals List */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {goals.map((goal) => {
-          const progress = (goal.currentAmount / goal.targetAmount) * 100
-          const remaining = goal.targetAmount - goal.currentAmount
-
-          return (
-            <Card key={goal.id} className="goal-card">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <CardTitle className="text-lg">{goal.name}</CardTitle>
-                    <CardDescription>{goal.description}</CardDescription>
-                  </div>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(goal.priority)}`}>
-                    {goal.priority}
-                  </span>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Progress</span>
-                  <span className="font-medium">{progress.toFixed(1)}%</span>
-                </div>
-
-                <div className="progress-bar">
-                  <div className="progress-fill savings-progress" style={{ width: `${progress}%` }} />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Current</p>
-                    <p className="font-semibold text-green-600 dark:text-green-400">
-                      ${goal.currentAmount.toLocaleString()}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Target</p>
-                    <p className="font-semibold">${goal.targetAmount.toLocaleString()}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">{getTimeRemaining(goal.targetDate)}</span>
-                  </div>
-                  <span className="text-muted-foreground">${remaining.toLocaleString()} to go</span>
-                </div>
-
-                <div className="flex space-x-2">
-                  <Button variant="outline" size="sm" className="flex-1 bg-transparent">
-                    Add Money
+            <div className="flex items-center space-x-4">
+              <div className="hidden md:flex items-center space-x-4">
+                <Link href="/accounts">
+                  <Button variant="ghost">Accounts</Button>
+                </Link>
+                <Link href="/transactions">
+                  <Button variant="ghost">Transactions</Button>
+                </Link>
+                <Link href="/categories">
+                  <Button variant="ghost">Categories</Button>
+                </Link>
+                <Link href="/goals">
+                  <Button variant="ghost" className="bg-blue-50 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                    Goals
                   </Button>
-                  <Button variant="outline" size="sm" className="flex-1 bg-transparent">
-                    Edit Goal
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
-
-      {/* Goal Insights */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Goal Insights</CardTitle>
-          <CardDescription>Tips and recommendations for achieving your goals</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="p-4 border rounded-lg bg-blue-50 dark:bg-blue-950">
-              <h3 className="font-medium text-blue-900 dark:text-blue-100">Monthly Savings Needed</h3>
-              <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                To reach all your goals on time, you need to save approximately $
-                {Math.round((totalTargetAmount - totalCurrentAmount) / 12).toLocaleString()} per month.
-              </p>
-            </div>
-
-            <div className="p-4 border rounded-lg bg-green-50 dark:bg-green-950">
-              <h3 className="font-medium text-green-900 dark:text-green-100">On Track Goals</h3>
-              <p className="text-sm text-green-700 dark:text-green-300 mt-1">
-                {goals.filter((goal) => goal.currentAmount / goal.targetAmount > 0.5).length} of your goals are more
-                than 50% complete. Great progress!
-              </p>
-            </div>
-
-            <div className="p-4 border rounded-lg bg-yellow-50 dark:bg-yellow-950">
-              <h3 className="font-medium text-yellow-900 dark:text-yellow-100">Needs Attention</h3>
-              <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-                Consider increasing contributions to goals with upcoming deadlines to stay on track.
-              </p>
+                </Link>
+                <Link href="/import-export">
+                  <Button variant="ghost">Import/Export</Button>
+                </Link>
+              </div>
+              <div className="md:hidden">
+                <Select defaultValue="goals">
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="accounts">
+                      <Link href="/accounts">Accounts</Link>
+                    </SelectItem>
+                    <SelectItem value="transactions">
+                      <Link href="/transactions">Transactions</Link>
+                    </SelectItem>
+                    <SelectItem value="categories">
+                      <Link href="/categories">Categories</Link>
+                    </SelectItem>
+                    <SelectItem value="goals">Goals</SelectItem>
+                    <SelectItem value="import-export">
+                      <Link href="/import-export">Import/Export</Link>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <ThemeToggle />
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </nav>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-3xl font-bold">Savings Goals</h1>
+            <p className="text-muted-foreground">Track your progress towards financial goals</p>
+          </div>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Goal
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Savings Goal</DialogTitle>
+                <DialogDescription>Create a new goal to track your savings progress.</DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleAddGoal}>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="name" className="text-right">
+                      Name
+                    </Label>
+                    <Input
+                      id="name"
+                      value={newGoal.name}
+                      onChange={(e) => setNewGoal({ ...newGoal, name: e.target.value })}
+                      className="col-span-3"
+                      placeholder="Goal name"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="targetAmount" className="text-right">
+                      Target Amount
+                    </Label>
+                    <Input
+                      id="targetAmount"
+                      type="number"
+                      step="0.01"
+                      value={newGoal.targetAmount}
+                      onChange={(e) => setNewGoal({ ...newGoal, targetAmount: e.target.value })}
+                      className="col-span-3"
+                      placeholder="0.00"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="deadline" className="text-right">
+                      Deadline
+                    </Label>
+                    <Input
+                      id="deadline"
+                      type="date"
+                      value={newGoal.deadline}
+                      onChange={(e) => setNewGoal({ ...newGoal, deadline: e.target.value })}
+                      className="col-span-3"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="trackingMode" className="text-right">
+                      Tracking Mode
+                    </Label>
+                    <Select
+                      value={newGoal.trackingMode}
+                      onValueChange={(value: "manual" | "account") =>
+                        setNewGoal({ ...newGoal, trackingMode: value, trackedAccountId: "" })
+                      }
+                    >
+                      <SelectTrigger className="col-span-3">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="manual">Manual Updates</SelectItem>
+                        <SelectItem value="account">Track Account Balance</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {newGoal.trackingMode === "account" && (
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="trackedAccount" className="text-right">
+                        Account
+                      </Label>
+                      <Select
+                        value={newGoal.trackedAccountId}
+                        onValueChange={(value) => setNewGoal({ ...newGoal, trackedAccountId: value })}
+                        required
+                      >
+                        <SelectTrigger className="col-span-3">
+                          <SelectValue placeholder="Select account to track" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {accounts.map((account) => (
+                            <SelectItem key={account.id} value={account.id}>
+                              {account.name} (${account.balance.toFixed(2)})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {newGoal.trackingMode === "manual" && (
+                    <div className="col-span-4 text-sm text-muted-foreground">
+                      You can manually add contributions to track your progress.
+                    </div>
+                  )}
+                  {newGoal.trackingMode === "account" && (
+                    <div className="col-span-4 text-sm text-muted-foreground">
+                      The goal will automatically track the selected account's balance.
+                    </div>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button type="submit">Add Goal</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {savingsGoals.map((goal) => {
+            const progress = (goal.currentAmount / goal.targetAmount) * 100
+            const { status, color } = getGoalStatus(goal)
+            const trackedAccount = getTrackedAccount(goal)
+
+            return (
+              <Card key={goal.id}>
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <CardTitle className="flex items-center gap-2">
+                        <Target className="h-5 w-5" />
+                        {goal.name}
+                      </CardTitle>
+                      <CardDescription className="mt-2">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              goal.trackingMode === "manual"
+                                ? "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300"
+                                : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300"
+                            }`}
+                          >
+                            {goal.trackingMode === "manual" ? "Manual" : "Auto-tracked"}
+                          </span>
+                          {trackedAccount && (
+                            <span className="text-xs text-muted-foreground">→ {trackedAccount.name}</span>
+                          )}
+                        </div>
+                        <div className="mt-2">
+                          Target: ${goal.targetAmount.toFixed(2)} by {new Date(goal.deadline).toLocaleDateString()}
+                        </div>
+                      </CardDescription>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => openEditDialog(goal)}>
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleDeleteGoal(goal.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium">Progress</span>
+                        <span className={`text-sm font-medium ${color}`}>{Math.min(progress, 100).toFixed(1)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                        <div
+                          className={`h-3 rounded-full transition-all duration-300 ${
+                            progress >= 100 ? "bg-green-500" : "bg-blue-600"
+                          }`}
+                          style={{ width: `${Math.min(progress, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-2xl font-bold">${goal.currentAmount.toFixed(2)}</p>
+                        <p className="text-sm text-muted-foreground">
+                          ${(goal.targetAmount - goal.currentAmount).toFixed(2)} remaining
+                        </p>
+                      </div>
+                      {goal.trackingMode === "manual" && (
+                        <Button variant="outline" size="sm" onClick={() => setContributionDialogGoal(goal)}>
+                          <DollarSign className="h-4 w-4 mr-1" />
+                          Add
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="text-xs text-muted-foreground">
+                      {status === "completed" && "🎉 Goal completed!"}
+                      {status === "overdue" && "⚠️ Past deadline"}
+                      {status === "in-progress" &&
+                        `${Math.ceil((new Date(goal.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days remaining`}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+
+        {savingsGoals.length === 0 && (
+          <div className="text-center py-12">
+            <Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium mb-2">No savings goals yet</h3>
+            <p className="text-muted-foreground mb-4">Set your first savings goal to start tracking your progress.</p>
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Your First Goal
+                </Button>
+              </DialogTrigger>
+            </Dialog>
+          </div>
+        )}
+
+        {/* Edit Goal Dialog */}
+        <Dialog open={!!editingGoal} onOpenChange={() => setEditingGoal(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Savings Goal</DialogTitle>
+              <DialogDescription>Update your savings goal information.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleEditGoal}>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="edit-name" className="text-right">
+                    Name
+                  </Label>
+                  <Input
+                    id="edit-name"
+                    value={newGoal.name}
+                    onChange={(e) => setNewGoal({ ...newGoal, name: e.target.value })}
+                    className="col-span-3"
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="edit-targetAmount" className="text-right">
+                    Target Amount
+                  </Label>
+                  <Input
+                    id="edit-targetAmount"
+                    type="number"
+                    step="0.01"
+                    value={newGoal.targetAmount}
+                    onChange={(e) => setNewGoal({ ...newGoal, targetAmount: e.target.value })}
+                    className="col-span-3"
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="edit-deadline" className="text-right">
+                    Deadline
+                  </Label>
+                  <Input
+                    id="edit-deadline"
+                    type="date"
+                    value={newGoal.deadline}
+                    onChange={(e) => setNewGoal({ ...newGoal, deadline: e.target.value })}
+                    className="col-span-3"
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="edit-trackingMode" className="text-right">
+                    Tracking Mode
+                  </Label>
+                  <Select
+                    value={newGoal.trackingMode}
+                    onValueChange={(value: "manual" | "account") =>
+                      setNewGoal({ ...newGoal, trackingMode: value, trackedAccountId: "" })
+                    }
+                  >
+                    <SelectTrigger className="col-span-3">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manual">Manual Updates</SelectItem>
+                      <SelectItem value="account">Track Account Balance</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {newGoal.trackingMode === "account" && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="edit-trackedAccount" className="text-right">
+                      Account
+                    </Label>
+                    <Select
+                      value={newGoal.trackedAccountId}
+                      onValueChange={(value) => setNewGoal({ ...newGoal, trackedAccountId: value })}
+                      required
+                    >
+                      <SelectTrigger className="col-span-3">
+                        <SelectValue placeholder="Select account to track" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {accounts.map((account) => (
+                          <SelectItem key={account.id} value={account.id}>
+                            {account.name} (${account.balance.toFixed(2)})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button type="submit">Update Goal</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Contribution Dialog */}
+        <Dialog open={!!contributionDialogGoal} onOpenChange={() => setContributionDialogGoal(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add Contribution</DialogTitle>
+              <DialogDescription>Add money to your "{contributionDialogGoal?.name}" savings goal.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleAddContribution}>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="contribution" className="text-right">
+                    Amount
+                  </Label>
+                  <Input
+                    id="contribution"
+                    type="number"
+                    step="0.01"
+                    value={contributionAmount}
+                    onChange={(e) => setContributionAmount(e.target.value)}
+                    className="col-span-3"
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+                {contributionDialogGoal && (
+                  <div className="col-span-4 text-sm text-muted-foreground">
+                    Current progress: ${contributionDialogGoal.currentAmount.toFixed(2)} / $
+                    {contributionDialogGoal.targetAmount.toFixed(2)}
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button type="submit">Add Contribution</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
     </div>
   )
 }
