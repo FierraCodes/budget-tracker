@@ -4,6 +4,7 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { MobileNav } from "@/components/mobile-nav"
 import Link from "next/link"
 import { Home, CreditCard, TrendingUp, Target, Upload, BarChart3 } from "lucide-react"
 
@@ -30,10 +31,16 @@ export default function RootLayout({
               <div className="container mx-auto px-4">
                 <div className="flex h-16 items-center justify-between">
                   <div className="flex items-center space-x-8">
+                    {/* Mobile Navigation */}
+                    <MobileNav />
+
+                    {/* Logo */}
                     <Link href="/" className="flex items-center space-x-2">
                       <BarChart3 className="h-6 w-6" />
                       <span className="font-bold text-xl">Money Manager</span>
                     </Link>
+
+                    {/* Desktop Navigation */}
                     <div className="hidden md:flex items-center space-x-6">
                       <Link href="/" className="flex items-center space-x-2 text-sm font-medium hover:text-primary">
                         <Home className="h-4 w-4" />
