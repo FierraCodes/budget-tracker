@@ -24,10 +24,9 @@ jobs:
       - name: ⚙️ Build and export Next.js app
         run: |
           bun run build
-          bun run export
 
       - name: 🧰 Install Capacitor CLI
-        run: bun add -d @capacitor/cli
+        run: bun add -d @capacitor/cli @capacitor/android
 
       - name: 🧭 Copy exported site to Android
         run: bunx cap copy android
