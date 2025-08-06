@@ -50,6 +50,9 @@ jobs:
            SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
         run: ./gradlew assembleRelease
 
+      - name: test
+        run: tree | grep "apk"
+
       - name: Create Git Tag
         id: create-tag
         uses: mathieudutour/github-tag-action@v6.2
