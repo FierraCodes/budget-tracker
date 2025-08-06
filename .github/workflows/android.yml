@@ -50,26 +50,6 @@ jobs:
            SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
         run: ./gradlew assembleDebug
 
-      - name: 🔑 Prepare signing key
-        run: |
-          echo "${{ secrets.SIGNING_KEY_STORE_BASE64 }}" > android/keystore.jks.base64
-          base64 -d android/keystore.jks.base64 > android/app/keystore.jks
-          rm android/keystore.jks.base64
-
-      - name: 🏗️ Build Signed APK (CLI-only)
-        working-directory: android
-        env:
-          KEYSTORE_PATH: './app/keystore.jks'
-          KEYSTORE_PASS: ${{ secrets.SIGNING_STORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
-          KEY_PASS: ${{ secrets.SIGNING_KEY_PASSWORD }}
-        run: |
-          ./gradlew assembleRelease \
-            -Dorg.gradle.project.signing.storeFile=$SIGNING_KEY_STORE_PATH \
-            -Dorg.gradle.project.signing.storePassword=$SIGNING_STORE_PASSWORD \
-            -Dorg.gradle.project.signing.keyAlias=$SIGNING_KEY_ALIAS \
-            -Dorg.gradle.project.signing.keyPassword=$SIGNING_KEY_PASSWORD
-
       - name: Upload artifact pls
         uses: actions/upload-artifact@v4.6.2
         with:
