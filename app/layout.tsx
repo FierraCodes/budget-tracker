@@ -1,12 +1,12 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Inter } from 'next/font/google'
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { MobileNav } from "@/components/mobile-nav"
 import Link from "next/link"
-import { Home, CreditCard, TrendingUp, Target, Upload, BarChart3 } from "lucide-react"
+import { Home, CreditCard, TrendingUp, Target, Upload, BarChart3 } from 'lucide-react'
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -89,7 +89,7 @@ export default function RootLayout({
             </nav>
 
             {/* Main Content */}
-            <main className="container mx-auto px-4 py-8">{children}</main>
+            <main className="container mx-auto px-4 py-8 mt-4 md:mt-0">{children}</main>
           </div>
         </ThemeProvider>
       </body>
