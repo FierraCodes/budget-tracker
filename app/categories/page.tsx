@@ -74,7 +74,23 @@ export default function CategoriesPage() {
         if (savedCategories) {
           const parsedCategories = JSON.parse(savedCategories)
           setCategories(Array.isArray(parsedCategories) ? parsedCategories : [])
+        } else {
+          // Initialize with default categories if none exist
+          const defaultCategories: Category[] = [
+            { id: "1", name: "Food", type: "expense", budget: 500, color: "#8884d8", subcategories: ["Groceries", "Restaurants", "Coffee"] },
+            { id: "2", name: "Transportation", type: "expense", budget: 300, color: "#82ca9d", subcategories: ["Gas", "Public Transit", "Parking"] },
+            { id: "3", name: "Housing", type: "expense", budget: 1200, color: "#ffc658", subcategories: ["Rent", "Utilities", "Maintenance"] },
+            { id: "4", name: "Entertainment", type: "expense", budget: 200, color: "#ff7300", subcategories: ["Movies", "Games", "Subscriptions"] },
+            { id: "5", name: "Healthcare", type: "expense", budget: 150, color: "#0088fe", subcategories: ["Doctor", "Pharmacy", "Insurance"] },
+            { id: "6", name: "Shopping", type: "expense", budget: 250, color: "#00c49f", subcategories: ["Clothing", "Electronics", "Home"] },
+            { id: "7", name: "Salary", type: "income", budget: 3000, color: "#00ff00", subcategories: ["Regular Pay", "Overtime", "Bonus"] },
+            { id: "8", name: "Freelance", type: "income", budget: 500, color: "#ffbb28", subcategories: ["Projects", "Consulting"] },
+            { id: "9", name: "Other", type: "expense", budget: 100, color: "#ff8042", subcategories: ["Miscellaneous"] },
+          ]
+          setCategories(defaultCategories)
+          localStorage.setItem("money-manager-categories", JSON.stringify(defaultCategories))
         }
+        
         if (savedTransactions) {
           const parsedTransactions = JSON.parse(savedTransactions)
           setTransactions(Array.isArray(parsedTransactions) ? parsedTransactions : [])
