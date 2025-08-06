@@ -59,7 +59,7 @@ jobs:
           if-no-files-found: error
 
       - name: Create Git Tag
-        uses: mathieudutour/github-tag-action@v6
+        uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           custom_tag: "v1.0.0-${{ github.run_number }}"
