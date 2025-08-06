@@ -1,0 +1,49 @@
+name: Build Android APK (Bun)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ⬇️ Checkout code
+        uses: actions/checkout@v3
+
+      - name: 🟫 Set up Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: 📦 Install dependencies
+        run: bun install
+
+      - name: ⚙️ Build and export Next.js app
+        run: |
+          bun run build
+          bun run export
+
+      - name: 🧰 Install Capacitor CLI
+        run: bun add -d @capacitor/cli
+
+      - name: 🧭 Copy exported site to Android
+        run: bunx cap copy android
+
+      - name: ☕ Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - name: 🏗️ Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: 📤 Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
