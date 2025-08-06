@@ -49,3 +49,8 @@ jobs:
         with:
           name: app-debug.apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Build & Publish Release APK
+        uses: pzxmsry/action-release-releaseapk@0.0.8
+        with:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
