@@ -51,7 +51,7 @@ jobs:
         run: ./gradlew assembleRelease
 
       - name: test
-        run: tree | grep "apk"
+        run: find | grep "apk"
 
       - name: Create Git Tag
         id: create-tag
