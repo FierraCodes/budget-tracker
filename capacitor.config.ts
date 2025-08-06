@@ -1,8 +1,8 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.yourapp.id',
-  appName: 'Your App Name',
+  appId: 'com.fierracodes.moneymanager',
+  appName: 'Money Manager',
   webDir: 'out', // ✅ Tell Capacitor to use the exported output
   bundledWebRuntime: false,
 };
