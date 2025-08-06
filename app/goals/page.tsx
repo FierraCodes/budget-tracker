@@ -17,7 +17,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Plus, Target, Calendar, DollarSign, Edit, Trash2, TrendingUp } from "lucide-react"
+import { Plus, Target, Calendar, DollarSign, Edit, Trash2, TrendingUp, Link, Unlink } from 'lucide-react'
+
+interface Account {
+  id: string
+  name: string
+  balance: number
+  type: "checking" | "savings" | "credit" | "investment"
+}
 
 interface SavingsGoal {
   id: string
@@ -28,10 +35,13 @@ interface SavingsGoal {
   targetDate: string
   category: string
   priority: "High" | "Medium" | "Low"
+  linkedAccountId?: string // New field for account linking
+  trackingMode: "manual" | "account" // New field for tracking mode
 }
 
 export default function GoalsPage() {
   const [goals, setGoals] = useState<SavingsGoal[]>([])
+  const [accounts, setAccounts] = useState<Account[]>([])
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [showContributeDialog, setShowContributeDialog] = useState(false)
   const [editingGoal, setEditingGoal] = useState<SavingsGoal | null>(null)
@@ -45,14 +55,23 @@ export default function GoalsPage() {
     targetDate: "",
     category: "",
     priority: "Medium" as "High" | "Medium" | "Low",
+    trackingMode: "manual" as "manual" | "account",
+    linkedAccountId: "",
   })
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       try {
         const savedGoals = localStorage.getItem("money-manager-goals")
+        const savedAccounts = localStorage.getItem("money-manager-accounts")
+        
         if (savedGoals) {
-          setGoals(JSON.parse(savedGoals))
+          const parsedGoals = JSON.parse(savedGoals)
+          setGoals(Array.isArray(parsedGoals) ? parsedGoals : [])
+        }
+        if (savedAccounts) {
+          const parsedAccounts = JSON.parse(savedAccounts)
+          setAccounts(Array.isArray(parsedAccounts) ? parsedAccounts : [])
         }
       } catch (error) {
         console.error("Error loading goals:", error)
@@ -60,21 +79,63 @@ export default function GoalsPage() {
     }
   }, [])
 
+  // Update goals with linked account balances
+  useEffect(() => {
+    if (goals.length > 0 && accounts.length > 0) {
+      const updatedGoals = goals.map(goal => {
+        if (goal.trackingMode === "account" && goal.linkedAccountId) {
+          const linkedAccount = accounts.find(acc => acc.id === goal.linkedAccountId)
+          if (linkedAccount) {
+            return {
+              ...goal,
+              currentAmount: Math.max(0, linkedAccount.balance) // Don't allow negative amounts for goals
+            }
+          }
+        }
+        return goal
+      })
+
+      // Only update if there are actual changes
+      const hasChanges = updatedGoals.some((goal, index) => 
+        goal.currentAmount !== goals[index].currentAmount
+      )
+
+      if (hasChanges) {
+        setGoals(updatedGoals)
+        if (typeof window !== "undefined") {
+          localStorage.setItem("money-manager-goals", JSON.stringify(updatedGoals))
+        }
+      }
+    }
+  }, [accounts]) // Only depend on accounts to avoid infinite loops
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!formData.name || !formData.targetAmount || !formData.targetDate || typeof window === "undefined") return
 
     try {
+      let currentAmount = Number.parseFloat(formData.currentAmount) || 0
+
+      // If linking to an account, use the account balance as current amount
+      if (formData.trackingMode === "account" && formData.linkedAccountId) {
+        const linkedAccount = accounts.find(acc => acc.id === formData.linkedAccountId)
+        if (linkedAccount) {
+          currentAmount = Math.max(0, linkedAccount.balance)
+        }
+      }
+
       const goal: SavingsGoal = {
         id: editingGoal ? editingGoal.id : Date.now().toString(),
         name: formData.name,
         description: formData.description,
         targetAmount: Number.parseFloat(formData.targetAmount),
-        currentAmount: Number.parseFloat(formData.currentAmount) || 0,
+        currentAmount,
         targetDate: formData.targetDate,
         category: formData.category,
         priority: formData.priority,
+        trackingMode: formData.trackingMode,
+        linkedAccountId: formData.trackingMode === "account" ? formData.linkedAccountId : undefined,
       }
 
       let updatedGoals: SavingsGoal[]
@@ -96,6 +157,8 @@ export default function GoalsPage() {
         targetDate: "",
         category: "",
         priority: "Medium",
+        trackingMode: "manual",
+        linkedAccountId: "",
       })
       setShowAddDialog(false)
       setEditingGoal(null)
@@ -111,12 +174,29 @@ export default function GoalsPage() {
 
     try {
       const amount = Number.parseFloat(contributionAmount)
-      const updatedGoals = goals.map((g) =>
-        g.id === contributingGoal.id ? { ...g, currentAmount: Math.min(g.currentAmount + amount, g.targetAmount) } : g,
-      )
-
-      setGoals(updatedGoals)
-      localStorage.setItem("money-manager-goals", JSON.stringify(updatedGoals))
+      
+      if (contributingGoal.trackingMode === "account" && contributingGoal.linkedAccountId) {
+        // Update the linked account balance
+        const updatedAccounts = accounts.map(acc => {
+          if (acc.id === contributingGoal.linkedAccountId) {
+            return { ...acc, balance: acc.balance + amount }
+          }
+          return acc
+        })
+        setAccounts(updatedAccounts)
+        localStorage.setItem("money-manager-accounts", JSON.stringify(updatedAccounts))
+        
+        // The goal will be automatically updated via useEffect
+      } else {
+        // Manual tracking - update goal directly
+        const updatedGoals = goals.map((g) =>
+          g.id === contributingGoal.id 
+            ? { ...g, currentAmount: Math.min(g.currentAmount + amount, g.targetAmount) } 
+            : g
+        )
+        setGoals(updatedGoals)
+        localStorage.setItem("money-manager-goals", JSON.stringify(updatedGoals))
+      }
 
       setContributionAmount("")
       setShowContributeDialog(false)
@@ -136,6 +216,8 @@ export default function GoalsPage() {
       targetDate: goal.targetDate,
       category: goal.category,
       priority: goal.priority,
+      trackingMode: goal.trackingMode || "manual",
+      linkedAccountId: goal.linkedAccountId || "",
     })
     setShowAddDialog(true)
   }
@@ -155,6 +237,22 @@ export default function GoalsPage() {
   const handleContributeClick = (goal: SavingsGoal) => {
     setContributingGoal(goal)
     setShowContributeDialog(true)
+  }
+
+  const toggleGoalTracking = (goal: SavingsGoal) => {
+    const newTrackingMode = goal.trackingMode === "manual" ? "account" : "manual"
+    const updatedGoal = {
+      ...goal,
+      trackingMode: newTrackingMode,
+      linkedAccountId: newTrackingMode === "manual" ? undefined : goal.linkedAccountId,
+    }
+
+    const updatedGoals = goals.map(g => g.id === goal.id ? updatedGoal : g)
+    setGoals(updatedGoals)
+    
+    if (typeof window !== "undefined") {
+      localStorage.setItem("money-manager-goals", JSON.stringify(updatedGoals))
+    }
   }
 
   const totalTargetAmount = goals.reduce((sum, goal) => sum + goal.targetAmount, 0)
@@ -188,6 +286,12 @@ export default function GoalsPage() {
     return `${Math.ceil(diffDays / 365)} years left`
   }
 
+  const getLinkedAccountName = (accountId?: string) => {
+    if (!accountId) return null
+    const account = accounts.find(acc => acc.id === accountId)
+    return account?.name || "Unknown Account"
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -203,7 +307,7 @@ export default function GoalsPage() {
               Add Goal
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle>{editingGoal ? "Edit Goal" : "Add Savings Goal"}</DialogTitle>
               <DialogDescription>
@@ -234,6 +338,57 @@ export default function GoalsPage() {
                 />
               </div>
 
+              <div className="form-field">
+                <Label htmlFor="trackingMode">Tracking Mode</Label>
+                <Select
+                  value={formData.trackingMode}
+                  onValueChange={(value: "manual" | "account") => 
+                    setFormData({ ...formData, trackingMode: value, linkedAccountId: "" })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual">Manual Updates</SelectItem>
+                    <SelectItem value="account">Link to Account</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {formData.trackingMode === "manual" 
+                    ? "You'll manually add money to this goal"
+                    : "Goal progress will automatically sync with the linked account balance"
+                  }
+                </p>
+              </div>
+
+              {formData.trackingMode === "account" && (
+                <div className="form-field">
+                  <Label htmlFor="linkedAccount">Linked Account</Label>
+                  <Select
+                    value={formData.linkedAccountId}
+                    onValueChange={(value) => setFormData({ ...formData, linkedAccountId: value })}
+                    required={formData.trackingMode === "account"}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select account to link" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {accounts
+                        .filter(acc => acc.type === "savings" || acc.type === "checking")
+                        .map((account) => (
+                          <SelectItem key={account.id} value={account.id}>
+                            {account.name} (${account.balance.toFixed(2)})
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Only savings and checking accounts can be linked to goals
+                  </p>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="form-field">
                   <Label htmlFor="targetAmount">Target Amount</Label>
@@ -248,17 +403,19 @@ export default function GoalsPage() {
                   />
                 </div>
 
-                <div className="form-field">
-                  <Label htmlFor="currentAmount">Current Amount</Label>
-                  <Input
-                    id="currentAmount"
-                    type="number"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={formData.currentAmount}
-                    onChange={(e) => setFormData({ ...formData, currentAmount: e.target.value })}
-                  />
-                </div>
+                {formData.trackingMode === "manual" && (
+                  <div className="form-field">
+                    <Label htmlFor="currentAmount">Current Amount</Label>
+                    <Input
+                      id="currentAmount"
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formData.currentAmount}
+                      onChange={(e) => setFormData({ ...formData, currentAmount: e.target.value })}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="form-field">
@@ -316,6 +473,8 @@ export default function GoalsPage() {
                       targetDate: "",
                       category: "",
                       priority: "Medium",
+                      trackingMode: "manual",
+                      linkedAccountId: "",
                     })
                   }}
                 >
@@ -337,6 +496,9 @@ export default function GoalsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{goals.length}</div>
+            <p className="text-xs text-muted-foreground">
+              {goals.filter(g => g.trackingMode === "account").length} linked to accounts
+            </p>
           </CardContent>
         </Card>
 
@@ -384,14 +546,28 @@ export default function GoalsPage() {
           {goals.map((goal) => {
             const progress = goal.targetAmount > 0 ? (goal.currentAmount / goal.targetAmount) * 100 : 0
             const remaining = goal.targetAmount - goal.currentAmount
+            const linkedAccountName = getLinkedAccountName(goal.linkedAccountId)
 
             return (
               <Card key={goal.id} className="goal-card">
                 <CardHeader>
                   <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <CardTitle className="text-lg">{goal.name}</CardTitle>
+                    <div className="space-y-1 flex-1">
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-lg">{goal.name}</CardTitle>
+                        {goal.trackingMode === "account" && (
+                          <div className="flex items-center gap-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">
+                            <Link className="h-3 w-3" />
+                            <span>Linked</span>
+                          </div>
+                        )}
+                      </div>
                       <CardDescription>{goal.description}</CardDescription>
+                      {linkedAccountName && (
+                        <p className="text-xs text-muted-foreground">
+                          Linked to: {linkedAccountName}
+                        </p>
+                      )}
                     </div>
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(goal.priority)}`}>
                       {goal.priority}
@@ -438,7 +614,15 @@ export default function GoalsPage() {
                       disabled={goal.currentAmount >= goal.targetAmount}
                     >
                       <TrendingUp className="h-4 w-4 mr-1" />
-                      Add Money
+                      {goal.trackingMode === "account" ? "Add to Account" : "Add Money"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toggleGoalTracking(goal)}
+                      title={goal.trackingMode === "account" ? "Switch to manual tracking" : "Link to account"}
+                    >
+                      {goal.trackingMode === "account" ? <Unlink className="h-4 w-4" /> : <Link className="h-4 w-4" />}
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => handleEdit(goal)}>
                       <Edit className="h-4 w-4" />
@@ -474,8 +658,15 @@ export default function GoalsPage() {
       <Dialog open={showContributeDialog} onOpenChange={setShowContributeDialog}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Add Money to Goal</DialogTitle>
-            <DialogDescription>Add money to "{contributingGoal?.name}" goal.</DialogDescription>
+            <DialogTitle>
+              {contributingGoal?.trackingMode === "account" ? "Add Money to Account" : "Add Money to Goal"}
+            </DialogTitle>
+            <DialogDescription>
+              {contributingGoal?.trackingMode === "account" 
+                ? `Add money to the linked account "${getLinkedAccountName(contributingGoal?.linkedAccountId)}" to update your goal progress.`
+                : `Add money to "${contributingGoal?.name}" goal.`
+              }
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleContribute} className="space-y-4">
             <div className="form-field">
@@ -512,6 +703,11 @@ export default function GoalsPage() {
                       ).toLocaleString()}
                     </span>
                   </div>
+                )}
+                {contributingGoal.trackingMode === "account" && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    This will be added to your linked account balance.
+                  </p>
                 )}
               </div>
             )}

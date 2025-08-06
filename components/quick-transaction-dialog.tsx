@@ -28,28 +28,19 @@ interface Transaction {
   date: string
 }
 
+interface Category {
+  id: string
+  name: string
+  type: "income" | "expense"
+  budget: number
+  color: string
+  subcategories?: string[]
+}
+
 interface QuickTransactionDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onTransactionAdded?: () => void
-}
-
-const defaultCategories = {
-  income: {
-    Salary: ["Regular Pay", "Overtime", "Bonus"],
-    Business: ["Sales", "Services", "Consulting"],
-    Investment: ["Dividends", "Interest", "Capital Gains"],
-    Other: ["Gifts", "Refunds", "Miscellaneous"],
-  },
-  expense: {
-    Food: ["Groceries", "Restaurants", "Coffee"],
-    Transportation: ["Gas", "Public Transit", "Parking"],
-    Housing: ["Rent", "Utilities", "Maintenance"],
-    Entertainment: ["Movies", "Games", "Subscriptions"],
-    Healthcare: ["Doctor", "Pharmacy", "Insurance"],
-    Shopping: ["Clothing", "Electronics", "Home"],
-    Other: ["Fees", "Taxes", "Miscellaneous"],
-  },
 }
 
 export function QuickTransactionDialog({ open, onOpenChange, onTransactionAdded }: QuickTransactionDialogProps) {
@@ -60,16 +51,24 @@ export function QuickTransactionDialog({ open, onOpenChange, onTransactionAdded 
   const [subcategory, setSubcategory] = useState("")
   const [description, setDescription] = useState("")
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
 
   useEffect(() => {
     if (open && typeof window !== "undefined") {
       try {
         const savedAccounts = localStorage.getItem("money-manager-accounts")
+        const savedCategories = localStorage.getItem("money-manager-categories")
+        
         if (savedAccounts) {
-          setAccounts(JSON.parse(savedAccounts))
+          const parsedAccounts = JSON.parse(savedAccounts)
+          setAccounts(Array.isArray(parsedAccounts) ? parsedAccounts : [])
+        }
+        if (savedCategories) {
+          const parsedCategories = JSON.parse(savedCategories)
+          setCategories(Array.isArray(parsedCategories) ? parsedCategories : [])
         }
       } catch (error) {
-        console.error("Error loading accounts:", error)
+        console.error("Error loading data:", error)
       }
     }
   }, [open])
@@ -127,7 +126,14 @@ export function QuickTransactionDialog({ open, onOpenChange, onTransactionAdded 
     }
   }
 
-  const categories = defaultCategories[type]
+  // Get categories for the selected type
+  const availableCategories = Array.isArray(categories) 
+    ? categories.filter(cat => cat.type === type)
+    : []
+
+  // Get subcategories for the selected category
+  const selectedCategory = availableCategories.find(cat => cat.name === category)
+  const availableSubcategories = selectedCategory?.subcategories || []
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -208,26 +214,31 @@ export function QuickTransactionDialog({ open, onOpenChange, onTransactionAdded 
                 <SelectValue placeholder="Select category" />
               </SelectTrigger>
               <SelectContent>
-                {Object.keys(categories).map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat}
+                {availableCategories.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.name}>
+                    {cat.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {availableCategories.length === 0 && (
+              <p className="text-sm text-muted-foreground mt-1">
+                No categories available. <a href="/categories" className="text-blue-600 hover:underline">Create categories</a> first.
+              </p>
+            )}
           </div>
 
-          {category && (
+          {category && availableSubcategories.length > 0 && (
             <div className="form-field">
               <Label htmlFor="subcategory" className="form-label">
                 Subcategory
               </Label>
               <Select value={subcategory} onValueChange={setSubcategory}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select subcategory" />
+                  <SelectValue placeholder="Select subcategory (optional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories[category as keyof typeof categories]?.map((subcat) => (
+                  {availableSubcategories.map((subcat) => (
                     <SelectItem key={subcat} value={subcat}>
                       {subcat}
                     </SelectItem>
@@ -253,7 +264,9 @@ export function QuickTransactionDialog({ open, onOpenChange, onTransactionAdded 
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit">Add Transaction</Button>
+            <Button type="submit" disabled={availableCategories.length === 0}>
+              Add Transaction
+            </Button>
           </div>
         </form>
       </DialogContent>

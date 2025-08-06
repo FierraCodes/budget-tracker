@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Search, ArrowUpRight, ArrowDownRight, Edit, Trash2 } from "lucide-react"
+import { Plus, Search, ArrowUpRight, ArrowDownRight, Edit, Trash2 } from 'lucide-react'
 
 interface Account {
   id: string
@@ -37,22 +37,13 @@ interface Transaction {
   date: string
 }
 
-const defaultCategories = {
-  income: {
-    Salary: ["Regular Pay", "Overtime", "Bonus"],
-    Business: ["Sales", "Services", "Consulting"],
-    Investment: ["Dividends", "Interest", "Capital Gains"],
-    Other: ["Gifts", "Refunds", "Miscellaneous"],
-  },
-  expense: {
-    Food: ["Groceries", "Restaurants", "Coffee"],
-    Transportation: ["Gas", "Public Transit", "Parking"],
-    Housing: ["Rent", "Utilities", "Maintenance"],
-    Entertainment: ["Movies", "Games", "Subscriptions"],
-    Healthcare: ["Doctor", "Pharmacy", "Insurance"],
-    Shopping: ["Clothing", "Electronics", "Home"],
-    Other: ["Fees", "Taxes", "Miscellaneous"],
-  },
+interface Category {
+  id: string
+  name: string
+  type: "income" | "expense"
+  budget: number
+  color: string
+  subcategories?: string[]
 }
 
 export default function TransactionsPage() {
@@ -62,6 +53,7 @@ export default function TransactionsPage() {
   const [filterAccount, setFilterAccount] = useState("all")
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
 
@@ -81,6 +73,7 @@ export default function TransactionsPage() {
       try {
         const savedTransactions = localStorage.getItem("money-manager-transactions")
         const savedAccounts = localStorage.getItem("money-manager-accounts")
+        const savedCategories = localStorage.getItem("money-manager-categories")
 
         if (savedTransactions) {
           const parsedTransactions = JSON.parse(savedTransactions)
@@ -90,10 +83,27 @@ export default function TransactionsPage() {
           const parsedAccounts = JSON.parse(savedAccounts)
           setAccounts(Array.isArray(parsedAccounts) ? parsedAccounts : [])
         }
+        if (savedCategories) {
+          const parsedCategories = JSON.parse(savedCategories)
+          setCategories(Array.isArray(parsedCategories) ? parsedCategories : [])
+        } else {
+          // Initialize with default categories only if none exist
+          const defaultCategories: Category[] = [
+            { id: "1", name: "Food", type: "expense", budget: 500, color: "#8884d8", subcategories: ["Groceries", "Restaurants", "Coffee"] },
+            { id: "2", name: "Transportation", type: "expense", budget: 300, color: "#82ca9d", subcategories: ["Gas", "Public Transit", "Parking"] },
+            { id: "3", name: "Housing", type: "expense", budget: 1200, color: "#ffc658", subcategories: ["Rent", "Utilities", "Maintenance"] },
+            { id: "4", name: "Entertainment", type: "expense", budget: 200, color: "#ff7300", subcategories: ["Movies", "Games", "Subscriptions"] },
+            { id: "5", name: "Salary", type: "income", budget: 3000, color: "#00ff00", subcategories: ["Regular Pay", "Overtime", "Bonus"] },
+            { id: "6", name: "Other", type: "expense", budget: 100, color: "#0088fe", subcategories: ["Miscellaneous"] },
+          ]
+          setCategories(defaultCategories)
+          localStorage.setItem("money-manager-categories", JSON.stringify(defaultCategories))
+        }
       } catch (error) {
         console.error("Error loading data:", error)
         setTransactions([])
         setAccounts([])
+        setCategories([])
       }
     }
   }, [])
@@ -110,7 +120,7 @@ export default function TransactionsPage() {
           description.toLowerCase().includes(searchTermLower) || category.toLowerCase().includes(searchTermLower)
 
         const matchesCategory =
-          filterCategory === "all" || String(transaction.category || "").toLowerCase() === filterCategory
+          filterCategory === "all" || String(transaction.category || "").toLowerCase() === filterCategory.toLowerCase()
 
         const matchesType = filterType === "all" || transaction.type === filterType
 
@@ -232,7 +242,19 @@ export default function TransactionsPage() {
     }
   }
 
-  const categories = defaultCategories[formData.type]
+  // Get categories for the selected type
+  const availableCategories = Array.isArray(categories) 
+    ? categories.filter(cat => cat.type === formData.type)
+    : []
+
+  // Get subcategories for the selected category
+  const selectedCategory = availableCategories.find(cat => cat.name === formData.category)
+  const availableSubcategories = selectedCategory?.subcategories || []
+
+  // Get unique categories for filter dropdown
+  const uniqueCategories = Array.isArray(categories) 
+    ? [...new Set(categories.map(cat => cat.name))]
+    : []
 
   return (
     <div className="space-y-8">
@@ -320,16 +342,21 @@ export default function TransactionsPage() {
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.keys(categories).map((cat) => (
-                      <SelectItem key={cat} value={cat}>
-                        {cat}
+                    {availableCategories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.name}>
+                        {cat.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {availableCategories.length === 0 && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    No categories available. <a href="/categories" className="text-blue-600 hover:underline">Create categories</a> first.
+                  </p>
+                )}
               </div>
 
-              {formData.category && (
+              {formData.category && availableSubcategories.length > 0 && (
                 <div className="form-field">
                   <Label htmlFor="subcategory">Subcategory</Label>
                   <Select
@@ -337,10 +364,10 @@ export default function TransactionsPage() {
                     onValueChange={(value) => setFormData({ ...formData, subcategory: value })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select subcategory" />
+                      <SelectValue placeholder="Select subcategory (optional)" />
                     </SelectTrigger>
                     <SelectContent>
-                      {categories[formData.category as keyof typeof categories]?.map((subcat) => (
+                      {availableSubcategories.map((subcat) => (
                         <SelectItem key={subcat} value={subcat}>
                           {subcat}
                         </SelectItem>
@@ -488,16 +515,11 @@ export default function TransactionsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="food">Food</SelectItem>
-                <SelectItem value="transportation">Transportation</SelectItem>
-                <SelectItem value="entertainment">Entertainment</SelectItem>
-                <SelectItem value="housing">Housing</SelectItem>
-                <SelectItem value="healthcare">Healthcare</SelectItem>
-                <SelectItem value="shopping">Shopping</SelectItem>
-                <SelectItem value="salary">Salary</SelectItem>
-                <SelectItem value="business">Business</SelectItem>
-                <SelectItem value="investment">Investment</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
+                {uniqueCategories.map((categoryName) => (
+                  <SelectItem key={categoryName} value={categoryName}>
+                    {categoryName}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

@@ -16,7 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Plus, TrendingUp, TrendingDown, Edit, Trash2 } from "lucide-react"
+import { Plus, TrendingUp, TrendingDown, Edit, Trash2, X } from 'lucide-react'
 
 interface Category {
   id: string
@@ -24,6 +24,7 @@ interface Category {
   type: "income" | "expense"
   budget: number
   color: string
+  subcategories?: string[]
 }
 
 interface Transaction {
@@ -55,11 +56,13 @@ export default function CategoriesPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
+  const [newSubcategory, setNewSubcategory] = useState("")
   const [formData, setFormData] = useState({
     name: "",
     type: "expense" as "income" | "expense",
     budget: "",
     color: defaultColors[0],
+    subcategories: [] as string[],
   })
 
   useEffect(() => {
@@ -69,10 +72,12 @@ export default function CategoriesPage() {
         const savedTransactions = localStorage.getItem("money-manager-transactions")
 
         if (savedCategories) {
-          setCategories(JSON.parse(savedCategories))
+          const parsedCategories = JSON.parse(savedCategories)
+          setCategories(Array.isArray(parsedCategories) ? parsedCategories : [])
         }
         if (savedTransactions) {
-          setTransactions(JSON.parse(savedTransactions))
+          const parsedTransactions = JSON.parse(savedTransactions)
+          setTransactions(Array.isArray(parsedTransactions) ? parsedTransactions : [])
         }
       } catch (error) {
         console.error("Error loading data:", error)
@@ -92,6 +97,7 @@ export default function CategoriesPage() {
         type: formData.type,
         budget: Number.parseFloat(formData.budget),
         color: formData.color,
+        subcategories: formData.subcategories,
       }
 
       let updatedCategories: Category[]
@@ -110,7 +116,9 @@ export default function CategoriesPage() {
         type: "expense",
         budget: "",
         color: defaultColors[0],
+        subcategories: [],
       })
+      setNewSubcategory("")
       setShowAddDialog(false)
       setEditingCategory(null)
     } catch (error) {
@@ -125,12 +133,24 @@ export default function CategoriesPage() {
       type: category.type,
       budget: category.budget.toString(),
       color: category.color,
+      subcategories: category.subcategories || [],
     })
     setShowAddDialog(true)
   }
 
   const handleDelete = (categoryId: string) => {
     if (typeof window === "undefined") return
+
+    // Check if category is used in transactions
+    const isUsed = transactions.some((t) => {
+      const category = categories.find((c) => c.id === categoryId)
+      return category && t.category === category.name
+    })
+
+    if (isUsed) {
+      alert("Cannot delete category that is used in transactions. Please delete or reassign transactions first.")
+      return
+    }
 
     try {
       const updatedCategories = categories.filter((c) => c.id !== categoryId)
@@ -139,6 +159,23 @@ export default function CategoriesPage() {
     } catch (error) {
       console.error("Error deleting category:", error)
     }
+  }
+
+  const addSubcategory = () => {
+    if (newSubcategory.trim() && !formData.subcategories.includes(newSubcategory.trim())) {
+      setFormData({
+        ...formData,
+        subcategories: [...formData.subcategories, newSubcategory.trim()],
+      })
+      setNewSubcategory("")
+    }
+  }
+
+  const removeSubcategory = (subcategory: string) => {
+    setFormData({
+      ...formData,
+      subcategories: formData.subcategories.filter((sub) => sub !== subcategory),
+    })
   }
 
   const getCategorySpending = (categoryName: string, type: "income" | "expense") => {
@@ -182,7 +219,7 @@ export default function CategoriesPage() {
               Add Category
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle>{editingCategory ? "Edit Category" : "Add Category"}</DialogTitle>
               <DialogDescription>
@@ -249,6 +286,42 @@ export default function CategoriesPage() {
                 </div>
               </div>
 
+              <div className="form-field">
+                <Label htmlFor="subcategories">Subcategories (Optional)</Label>
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Add subcategory"
+                      value={newSubcategory}
+                      onChange={(e) => setNewSubcategory(e.target.value)}
+                      onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addSubcategory())}
+                    />
+                    <Button type="button" onClick={addSubcategory} size="sm">
+                      Add
+                    </Button>
+                  </div>
+                  {formData.subcategories.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {formData.subcategories.map((subcategory) => (
+                        <div
+                          key={subcategory}
+                          className="flex items-center gap-1 bg-muted px-2 py-1 rounded-md text-sm"
+                        >
+                          <span>{subcategory}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeSubcategory(subcategory)}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="flex justify-end space-x-2">
                 <Button
                   type="button"
@@ -261,7 +334,9 @@ export default function CategoriesPage() {
                       type: "expense",
                       budget: "",
                       color: defaultColors[0],
+                      subcategories: [],
                     })
+                    setNewSubcategory("")
                   }}
                 >
                   Cancel
@@ -344,14 +419,22 @@ export default function CategoriesPage() {
                         />
                         <div>
                           <h3 className="font-medium">{category.name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {
-                              transactions.filter(
-                                (t) => t && t.category && t.category.toLowerCase() === category.name.toLowerCase(),
-                              ).length
-                            }{" "}
-                            transactions
-                          </p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <span>
+                              {
+                                transactions.filter(
+                                  (t) => t && t.category && t.category.toLowerCase() === category.name.toLowerCase(),
+                                ).length
+                              }{" "}
+                              transactions
+                            </span>
+                            {category.subcategories && category.subcategories.length > 0 && (
+                              <>
+                                <span>•</span>
+                                <span>{category.subcategories.length} subcategories</span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -379,6 +462,15 @@ export default function CategoriesPage() {
                         style={{ width: `${Math.min(percentage || 0, 100)}%` }}
                       />
                     </div>
+                    {category.subcategories && category.subcategories.length > 0 && (
+                      <div className="ml-7 flex flex-wrap gap-1">
+                        {category.subcategories.map((sub) => (
+                          <span key={sub} className="text-xs bg-muted px-2 py-1 rounded">
+                            {sub}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -416,14 +508,22 @@ export default function CategoriesPage() {
                         />
                         <div>
                           <h3 className="font-medium">{category.name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {
-                              transactions.filter(
-                                (t) => t && t.category && t.category.toLowerCase() === category.name.toLowerCase(),
-                              ).length
-                            }{" "}
-                            transactions
-                          </p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <span>
+                              {
+                                transactions.filter(
+                                  (t) => t && t.category && t.category.toLowerCase() === category.name.toLowerCase(),
+                                ).length
+                              }{" "}
+                              transactions
+                            </span>
+                            {category.subcategories && category.subcategories.length > 0 && (
+                              <>
+                                <span>•</span>
+                                <span>{category.subcategories.length} subcategories</span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -449,6 +549,15 @@ export default function CategoriesPage() {
                         style={{ width: `${Math.min(percentage || 0, 100)}%` }}
                       />
                     </div>
+                    {category.subcategories && category.subcategories.length > 0 && (
+                      <div className="ml-7 flex flex-wrap gap-1">
+                        {category.subcategories.map((sub) => (
+                          <span key={sub} className="text-xs bg-muted px-2 py-1 rounded">
+                            {sub}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )
               })}
