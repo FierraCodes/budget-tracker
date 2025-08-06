@@ -57,9 +57,8 @@ jobs:
         with:
           name: app-release
           path: |
-            android/app/build/outputs/apk/release/*.apk
+            android/app/release/*.apk
             android/app/build/outputs/bundle/release/*.aab
-          if-no-files-found: error
 
       - name: Create Git Tag
         uses: mathieudutour/github-tag-action@v6.2
