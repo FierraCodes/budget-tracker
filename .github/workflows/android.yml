@@ -28,6 +28,9 @@ jobs:
       - name: 🧰 Install Capacitor CLI
         run: bun add -d @capacitor/cli @capacitor/android
 
+      - name: Add Android Capacitor
+        run: bunx cap add android
+
       - name: 🧭 Copy web output to Android
         run: bunx cap copy android
 
