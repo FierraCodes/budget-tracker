@@ -68,7 +68,7 @@ jobs:
           custom_tag: "v1.0.0-${{ github.run_number }}"
 
       - name: Debug tag
-        run: echo "Tag will be: ${{ steps.create-tag.outputs.result }}"
+        run: echo "Tag will be ${{ steps.create-tag.outputs.result }}"
           
       - name: Create Github Release
         uses: softprops/action-gh-release@v2.3.2
