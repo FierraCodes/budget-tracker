@@ -42,20 +42,26 @@ jobs:
 
       - name: 🏗️ Build debug APK
         working-directory: android
-        run: ./gradlew assembleRelease
+        env:
+           SIGNING_KEY_STORE_PATH: ${{ secrets.SIGNING_KEY_STORE_PATH }}
+           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+        run: ./gradlew bundleRelease
 
-      - name: 📤 Upload debug APK
-        uses: actions/upload-artifact@v4
+      - name: Upload Release Build to Artifacts
+        uses: actions/upload-artifact@v3
         with:
-          name: app-debug.apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-
-      - uses: "marvinpinto/action-automatic-releases@latest"
+           name: release-artifacts
+           paths: |
+             app/build/outputs/apk/release/
+             app/build/outputs/bundle/release/
+       #4      
+      - name: Create Github Release
+        uses: softprops/action-gh-release@v1
         with:
-          repo_token: "${{ secrets.TOKEN }}"
-          automatic_release_tag: "latest"
-          prerelease: true
-          title: "Build"
+          generate_release_notes: true
+          prerelease: false
           files: |
-            LICENSE.txt
-            android/app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/bundle/release/app-release.aab
