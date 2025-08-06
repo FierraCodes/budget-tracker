@@ -58,6 +58,7 @@ jobs:
             android/app/build/outputs/bundle/release/*.aab
 
       - name: Create Git Tag
+        id: create-tag
         uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.TOKEN }}
