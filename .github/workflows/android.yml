@@ -67,6 +67,7 @@ jobs:
       - name: Create Github Release
         uses: softprops/action-gh-release@v2.3.2
         with:
+          token: ${{ secrets.TOKEN }}
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref }}
           generate_release_notes: true
