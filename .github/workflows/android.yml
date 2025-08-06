@@ -38,7 +38,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: 21
+          java-version: '21'
 
       - name: 🏗️ Build debug APK
         working-directory: android
@@ -50,18 +50,19 @@ jobs:
         run: ./gradlew bundleRelease
 
       - name: Upload Release Build to Artifacts
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v4
         with:
-           name: app-release.apk
-           paths: |
-             apprelease/
-             app/release/
-       #4      
+          name: app-release
+          path: |
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+
       - name: Create Github Release
         uses: softprops/action-gh-release@v1
         with:
           generate_release_notes: true
           prerelease: false
           files: |
-            app/build/outputs/apk/release/app-release.apk
-            app/build/outputs/bundle/release/app-release.aab
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/bundle/release/*.aab
