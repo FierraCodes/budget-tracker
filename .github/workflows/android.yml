@@ -51,7 +51,6 @@ jobs:
 
       - name: Verify artifacts
         run: |
-          ls -la android/app/release/ android/app/build/outputs/bundle/release/
           tree
 
       - name: Upload Release Build to Artifacts
