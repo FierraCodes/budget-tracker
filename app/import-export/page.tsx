@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Upload, Download, FileText, AlertCircle, CheckCircle, Database } from 'lucide-react'
+import { Upload, Download, FileText, AlertCircle, CheckCircle, Database, FileImage } from 'lucide-react'
 
 interface Transaction {
   id: string
@@ -107,42 +107,204 @@ export default function ImportExportPage() {
     return transactions
   }
 
-  const handleImport = async () => {
-    if (!importFile) return
+const parseSQL = (sqlText: string) => {
+  const transactions: Transaction[] = []
+  const accounts: Account[] = []
+  const categories: Category[] = []
+  const goals: SavingsGoal[] = []
 
-    setImportStatus("processing")
-    setImportError("")
+  // Split SQL into lines and process INSERT statements
+  const lines = sqlText.split('\n')
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+    
+    // Look for INSERT INTO statements
+    if (line.startsWith('INSERT INTO ')) {
+      try {
+        // Extract table name
+        const tableMatch = line.match(/INSERT INTO (\w+) VALUES/)
+        if (!tableMatch) continue
+        
+        const tableName = tableMatch[1]
+        
+        // Extract values - look for content between parentheses
+        const valuesMatch = line.match(/VALUES $$(.*)$$;?$/)
+        if (!valuesMatch) continue
+        
+        const valuesStr = valuesMatch[1]
+        
+        // Parse values with proper quote handling
+        const values = parseCSVLine(valuesStr)
+        
+        // Map to appropriate data structure based on table
+        switch (tableName) {
+          case 'transactions':
+            if (values.length >= 8) {
+              transactions.push({
+                id: values[0] || Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                accountId: values[1] || "1",
+                type: (values[2] || "expense") as "income" | "expense" | "transfer",
+                amount: parseFloat(values[3]) || 0,
+                category: values[4] || "",
+                subcategory: values[5] || "",
+                description: values[6] || "",
+                date: values[7] || new Date().toISOString().split('T')[0]
+              })
+            }
+            break
+            
+          case 'accounts':
+            if (values.length >= 6) {
+              accounts.push({
+                id: values[0] || Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                name: values[1] || "Unknown Account",
+                type: (values[2] || "checking") as "checking" | "savings" | "credit" | "investment",
+                balance: parseFloat(values[3]) || 0,
+                bank: values[4] || "",
+                accountNumber: values[5] || ""
+              })
+            }
+            break
+            
+          case 'categories':
+            if (values.length >= 6) {
+              let subcategories: string[] = []
+              try {
+                if (values[5] && values[5] !== 'NULL') {
+                  subcategories = JSON.parse(values[5])
+                }
+              } catch {
+                subcategories = []
+              }
+              
+              categories.push({
+                id: values[0] || Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                name: values[1] || "Unknown Category",
+                type: (values[2] || "expense") as "income" | "expense",
+                budget: parseFloat(values[3]) || 0,
+                color: values[4] || "#8884d8",
+                subcategories
+              })
+            }
+            break
+            
+          case 'goals':
+            if (values.length >= 10) {
+              goals.push({
+                id: values[0] || Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                name: values[1] || "Unknown Goal",
+                description: values[2] || "",
+                targetAmount: parseFloat(values[3]) || 0,
+                currentAmount: parseFloat(values[4]) || 0,
+                targetDate: values[5] || new Date().toISOString().split('T')[0],
+                category: values[6] || "",
+                priority: (values[7] || "Medium") as "High" | "Medium" | "Low",
+                linkedAccountId: values[8] === 'NULL' || !values[8] ? undefined : values[8],
+                trackingMode: (values[9] || "manual") as "manual" | "account"
+              })
+            }
+            break
+        }
+      } catch (error) {
+        console.warn(`Error parsing SQL line: ${line}`, error)
+        continue
+      }
+    }
+  }
 
-    try {
-      const text = await importFile.text()
-      let importedTransactions: Transaction[] = []
+  return { transactions, accounts, categories, goals }
+}
 
-      if (importFile.name.endsWith('.csv')) {
-        importedTransactions = parseCSV(text)
-      } else if (importFile.name.endsWith('.json')) {
-        const data = JSON.parse(text)
-        importedTransactions = Array.isArray(data) ? data : data.transactions || []
+// Helper function to parse CSV-like values with proper quote handling
+const parseCSVLine = (line: string): string[] => {
+  const values: string[] = []
+  let current = ''
+  let inQuotes = false
+  let i = 0
+  
+  while (i < line.length) {
+    const char = line[i]
+    const nextChar = line[i + 1]
+    
+    if (char === "'" && !inQuotes) {
+      // Start of quoted string
+      inQuotes = true
+    } else if (char === "'" && inQuotes) {
+      // Check if it's an escaped quote
+      if (nextChar === "'") {
+        // Escaped quote - add single quote to current value
+        current += "'"
+        i++ // Skip the next quote
       } else {
-        throw new Error("Unsupported file format")
+        // End of quoted string
+        inQuotes = false
       }
+    } else if (char === ',' && !inQuotes) {
+      // End of value
+      values.push(current.trim())
+      current = ''
+    } else if (!inQuotes && (char === ' ' || char === '\t')) {
+      // Skip whitespace outside quotes
+    } else {
+      // Regular character
+      current += char
+    }
+    
+    i++
+  }
+  
+  // Add the last value
+  if (current.trim() || values.length > 0) {
+    values.push(current.trim())
+  }
+  
+  return values
+}
 
-      if (importedTransactions.length === 0) {
-        throw new Error("No valid transactions found in file")
-      }
+  const handleImport = async () => {
+  if (!importFile) return
 
-      // Get existing data
-      const existingTransactions = JSON.parse(localStorage.getItem("money-manager-transactions") || "[]")
-      const existingAccounts = JSON.parse(localStorage.getItem("money-manager-accounts") || "[]")
+  setImportStatus("processing")
+  setImportError("")
 
-      // Merge transactions
-      const allTransactions = [...existingTransactions, ...importedTransactions]
+  try {
+    const text = await importFile.text()
+    let importedData: any = {}
+
+    if (importFile.name.endsWith('.csv')) {
+      importedData.transactions = parseCSV(text)
+    } else if (importFile.name.endsWith('.json')) {
+      const data = JSON.parse(text)
+      importedData = Array.isArray(data) ? { transactions: data } : data
+    } else if (importFile.name.endsWith('.sql')) {
+      importedData = parseSQL(text)
+      console.log('Parsed SQL data:', importedData) // Debug log
+    } else {
+      throw new Error("Unsupported file format. Please use .csv, .json, or .sql files.")
+    }
+
+    // Get existing data
+    const existingTransactions = JSON.parse(localStorage.getItem("money-manager-transactions") || "[]")
+    const existingAccounts = JSON.parse(localStorage.getItem("money-manager-accounts") || "[]")
+    const existingCategories = JSON.parse(localStorage.getItem("money-manager-categories") || "[]")
+    const existingGoals = JSON.parse(localStorage.getItem("money-manager-goals") || "[]")
+
+    let importCount = 0
+    let importSummary: string[] = []
+
+    // Import transactions
+    if (importedData.transactions && Array.isArray(importedData.transactions) && importedData.transactions.length > 0) {
+      const allTransactions = [...existingTransactions, ...importedData.transactions]
       localStorage.setItem("money-manager-transactions", JSON.stringify(allTransactions))
+      importCount += importedData.transactions.length
+      importSummary.push(`${importedData.transactions.length} transactions`)
 
-      // Update account balances
+      // Update account balances for transactions
       if (existingAccounts.length > 0) {
         const updatedAccounts = existingAccounts.map((account: Account) => {
-          const accountTransactions = importedTransactions.filter(t => t.accountId === account.id)
-          const balanceChange = accountTransactions.reduce((sum, t) => {
+          const accountTransactions = importedData.transactions.filter((t: Transaction) => t.accountId === account.id)
+          const balanceChange = accountTransactions.reduce((sum: number, t: Transaction) => {
             return sum + (t.type === "income" ? t.amount : -t.amount)
           }, 0)
           
@@ -150,18 +312,48 @@ export default function ImportExportPage() {
         })
         localStorage.setItem("money-manager-accounts", JSON.stringify(updatedAccounts))
       }
-
-      setImportStatus("success")
-      setTimeout(() => setImportStatus("idle"), 3000)
-    } catch (error) {
-      console.error("Import error:", error)
-      setImportError(error instanceof Error ? error.message : "Import failed")
-      setImportStatus("error")
-      setTimeout(() => setImportStatus("idle"), 5000)
     }
-  }
 
-  // Create SQL dump instead of binary SQLite file
+    // Import accounts
+    if (importedData.accounts && Array.isArray(importedData.accounts) && importedData.accounts.length > 0) {
+      const allAccounts = [...existingAccounts, ...importedData.accounts]
+      localStorage.setItem("money-manager-accounts", JSON.stringify(allAccounts))
+      importCount += importedData.accounts.length
+      importSummary.push(`${importedData.accounts.length} accounts`)
+    }
+
+    // Import categories
+    if (importedData.categories && Array.isArray(importedData.categories) && importedData.categories.length > 0) {
+      const allCategories = [...existingCategories, ...importedData.categories]
+      localStorage.setItem("money-manager-categories", JSON.stringify(allCategories))
+      importCount += importedData.categories.length
+      importSummary.push(`${importedData.categories.length} categories`)
+    }
+
+    // Import goals
+    if (importedData.goals && Array.isArray(importedData.goals) && importedData.goals.length > 0) {
+      const allGoals = [...existingGoals, ...importedData.goals]
+      localStorage.setItem("money-manager-goals", JSON.stringify(allGoals))
+      importCount += importedData.goals.length
+      importSummary.push(`${importedData.goals.length} goals`)
+    }
+
+    if (importCount === 0) {
+      throw new Error(`No valid data found in file. Expected transactions, accounts, categories, or goals data. File type: ${importFile.name.split('.').pop()?.toUpperCase()}`)
+    }
+
+    setImportStatus("success")
+    console.log(`Successfully imported: ${importSummary.join(', ')}`)
+    setTimeout(() => setImportStatus("idle"), 3000)
+  } catch (error) {
+    console.error("Import error:", error)
+    setImportError(error instanceof Error ? error.message : "Import failed")
+    setImportStatus("error")
+    setTimeout(() => setImportStatus("idle"), 5000)
+  }
+}
+
+  // Create SQL dump
   const createSQLDump = (data: any, dataType: string): string => {
     let sql = "-- Money Manager SQLite Database Export\n"
     sql += `-- Generated on: ${new Date().toISOString()}\n`
@@ -325,6 +517,329 @@ export default function ImportExportPage() {
     return ""
   }
 
+  // Create PDF report
+  const createPDFReport = (data: any, dataType: string): string => {
+    const now = new Date()
+    const dateStr = now.toLocaleDateString()
+    const timeStr = now.toLocaleTimeString()
+
+    let html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Money Manager Report - ${dateStr}</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 40px; 
+            color: #333; 
+            line-height: 1.6;
+        }
+        .header { 
+            text-align: center; 
+            border-bottom: 2px solid #333; 
+            padding-bottom: 20px; 
+            margin-bottom: 30px; 
+        }
+        .header h1 { 
+            color: #2563eb; 
+            margin: 0; 
+            font-size: 28px; 
+        }
+        .header p { 
+            margin: 5px 0; 
+            color: #666; 
+        }
+        .section { 
+            margin-bottom: 30px; 
+        }
+        .section h2 { 
+            color: #1f2937; 
+            border-bottom: 1px solid #e5e7eb; 
+            padding-bottom: 10px; 
+        }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 15px; 
+        }
+        th, td { 
+            border: 1px solid #d1d5db; 
+            padding: 12px; 
+            text-align: left; 
+        }
+        th { 
+            background-color: #f3f4f6; 
+            font-weight: bold; 
+        }
+        .amount-positive { color: #059669; font-weight: bold; }
+        .amount-negative { color: #dc2626; font-weight: bold; }
+        .summary-card { 
+            background: #f8fafc; 
+            border: 1px solid #e2e8f0; 
+            border-radius: 8px; 
+            padding: 20px; 
+            margin: 15px 0; 
+        }
+        .summary-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+            gap: 20px; 
+        }
+        .summary-item { 
+            text-align: center; 
+        }
+        .summary-value { 
+            font-size: 24px; 
+            font-weight: bold; 
+            color: #2563eb; 
+        }
+        .summary-label { 
+            color: #6b7280; 
+            font-size: 14px; 
+        }
+        .footer { 
+            margin-top: 50px; 
+            text-align: center; 
+            color: #6b7280; 
+            font-size: 12px; 
+            border-top: 1px solid #e5e7eb; 
+            padding-top: 20px; 
+        }
+        @media print {
+            body { margin: 20px; }
+            .section { page-break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>💰 Money Manager Financial Report</h1>
+        <p>Generated on ${dateStr} at ${timeStr}</p>
+        <p>Report Type: ${dataType === 'all' ? 'Complete Financial Overview' : dataType.charAt(0).toUpperCase() + dataType.slice(1)} Report</p>
+    </div>
+`
+
+    if (dataType === "all" || dataType === "transactions") {
+      const transactions = dataType === "all" ? data.transactions : data
+      const accounts = dataType === "all" ? data.accounts : JSON.parse(localStorage.getItem("money-manager-accounts") || "[]")
+      
+      if (Array.isArray(transactions) && transactions.length > 0) {
+        const totalIncome = transactions.filter((t: Transaction) => t.type === 'income').reduce((sum: number, t: Transaction) => sum + t.amount, 0)
+        const totalExpenses = transactions.filter((t: Transaction) => t.type === 'expense').reduce((sum: number, t: Transaction) => sum + t.amount, 0)
+        const netFlow = totalIncome - totalExpenses
+
+        html += `
+    <div class="section">
+        <h2>📊 Transaction Summary</h2>
+        <div class="summary-card">
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <div class="summary-value amount-positive">$${totalIncome.toLocaleString()}</div>
+                    <div class="summary-label">Total Income</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value amount-negative">$${totalExpenses.toLocaleString()}</div>
+                    <div class="summary-label">Total Expenses</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value ${netFlow >= 0 ? 'amount-positive' : 'amount-negative'}">$${netFlow.toLocaleString()}</div>
+                    <div class="summary-label">Net Flow</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value">${transactions.length}</div>
+                    <div class="summary-label">Total Transactions</div>
+                </div>
+            </div>
+        </div>
+        
+        <h3>Recent Transactions</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th>Account</th>
+                    <th>Amount</th>
+                    <th>Type</th>
+                </tr>
+            </thead>
+            <tbody>
+`
+        
+        transactions.slice(0, 50).forEach((t: Transaction) => {
+          const account = accounts.find((a: Account) => a.id === t.accountId)
+          const amountClass = t.type === 'income' ? 'amount-positive' : 'amount-negative'
+          const amountPrefix = t.type === 'income' ? '+' : '-'
+          
+          html += `
+                <tr>
+                    <td>${t.date}</td>
+                    <td>${t.description || 'N/A'}</td>
+                    <td>${t.category || 'N/A'}</td>
+                    <td>${account?.name || 'Unknown'}</td>
+                    <td class="${amountClass}">${amountPrefix}$${t.amount.toFixed(2)}</td>
+                    <td>${t.type.charAt(0).toUpperCase() + t.type.slice(1)}</td>
+                </tr>
+`
+        })
+        
+        html += `
+            </tbody>
+        </table>
+    </div>
+`
+      }
+    }
+
+    if (dataType === "all" || dataType === "accounts") {
+      const accounts = dataType === "all" ? data.accounts : data
+      
+      if (Array.isArray(accounts) && accounts.length > 0) {
+        const totalAssets = accounts.filter((a: Account) => a.type !== 'credit').reduce((sum: number, a: Account) => sum + Math.max(0, a.balance), 0)
+        const totalLiabilities = accounts.filter((a: Account) => a.type === 'credit').reduce((sum: number, a: Account) => sum + Math.max(0, -a.balance), 0)
+        const netWorth = totalAssets - totalLiabilities
+
+        html += `
+    <div class="section">
+        <h2>🏦 Account Overview</h2>
+        <div class="summary-card">
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <div class="summary-value amount-positive">$${totalAssets.toLocaleString()}</div>
+                    <div class="summary-label">Total Assets</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value amount-negative">$${totalLiabilities.toLocaleString()}</div>
+                    <div class="summary-label">Total Liabilities</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value ${netWorth >= 0 ? 'amount-positive' : 'amount-negative'}">$${netWorth.toLocaleString()}</div>
+                    <div class="summary-label">Net Worth</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value">${accounts.length}</div>
+                    <div class="summary-label">Total Accounts</div>
+                </div>
+            </div>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Account Name</th>
+                    <th>Type</th>
+                    <th>Bank</th>
+                    <th>Balance</th>
+                </tr>
+            </thead>
+            <tbody>
+`
+        
+        accounts.forEach((a: Account) => {
+          const balanceClass = a.type === 'credit' ? (a.balance < 0 ? 'amount-negative' : 'amount-positive') : (a.balance >= 0 ? 'amount-positive' : 'amount-negative')
+          
+          html += `
+                <tr>
+                    <td>${a.name}</td>
+                    <td>${a.type.charAt(0).toUpperCase() + a.type.slice(1)}</td>
+                    <td>${a.bank || 'N/A'}</td>
+                    <td class="${balanceClass}">$${a.balance.toLocaleString()}</td>
+                </tr>
+`
+        })
+        
+        html += `
+            </tbody>
+        </table>
+    </div>
+`
+      }
+    }
+
+    if (dataType === "all" || dataType === "goals") {
+      const goals = dataType === "all" ? data.goals : data
+      
+      if (Array.isArray(goals) && goals.length > 0) {
+        const totalTarget = goals.reduce((sum: number, g: SavingsGoal) => sum + g.targetAmount, 0)
+        const totalCurrent = goals.reduce((sum: number, g: SavingsGoal) => sum + g.currentAmount, 0)
+        const overallProgress = totalTarget > 0 ? (totalCurrent / totalTarget) * 100 : 0
+
+        html += `
+    <div class="section">
+        <h2>🎯 Savings Goals</h2>
+        <div class="summary-card">
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <div class="summary-value">$${totalTarget.toLocaleString()}</div>
+                    <div class="summary-label">Total Target</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value amount-positive">$${totalCurrent.toLocaleString()}</div>
+                    <div class="summary-label">Total Saved</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value">${overallProgress.toFixed(1)}%</div>
+                    <div class="summary-label">Overall Progress</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value">${goals.length}</div>
+                    <div class="summary-label">Active Goals</div>
+                </div>
+            </div>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Goal Name</th>
+                    <th>Target Amount</th>
+                    <th>Current Amount</th>
+                    <th>Progress</th>
+                    <th>Target Date</th>
+                    <th>Priority</th>
+                </tr>
+            </thead>
+            <tbody>
+`
+        
+        goals.forEach((g: SavingsGoal) => {
+          const progress = g.targetAmount > 0 ? (g.currentAmount / g.targetAmount) * 100 : 0
+          
+          html += `
+                <tr>
+                    <td>${g.name}</td>
+                    <td>$${g.targetAmount.toLocaleString()}</td>
+                    <td class="amount-positive">$${g.currentAmount.toLocaleString()}</td>
+                    <td>${progress.toFixed(1)}%</td>
+                    <td>${g.targetDate}</td>
+                    <td>${g.priority}</td>
+                </tr>
+`
+        })
+        
+        html += `
+            </tbody>
+        </table>
+    </div>
+`
+      }
+    }
+
+    html += `
+    <div class="footer">
+        <p>This report was generated by Money Manager - Personal Finance Tracker</p>
+        <p>Data is processed locally and remains private on your device</p>
+    </div>
+</body>
+</html>
+`
+
+    return html
+  }
+
   const handleExport = async () => {
     try {
       let data: any = {}
@@ -428,6 +943,11 @@ export default function ImportExportPage() {
           mimeType = "text/csv"
           filename += ".csv" // Export as CSV for Excel compatibility
           break
+        case "pdf":
+          content = createPDFReport(data, exportDataType)
+          mimeType = "text/html"
+          filename += ".html" // Export as HTML that can be printed to PDF
+          break
         default:
           content = JSON.stringify(data, null, 2)
           mimeType = "application/json"
@@ -442,6 +962,18 @@ export default function ImportExportPage() {
       a.download = filename
       a.click()
       window.URL.revokeObjectURL(url)
+
+      // For PDF, open in new window for printing
+      if (exportFormat === "pdf") {
+        const printWindow = window.open('', '_blank')
+        if (printWindow) {
+          printWindow.document.write(content)
+          printWindow.document.close()
+          setTimeout(() => {
+            printWindow.print()
+          }, 500)
+        }
+      }
     } catch (error) {
       console.error("Export error:", error)
       alert("Export failed. Please try again.")
@@ -515,13 +1047,13 @@ export default function ImportExportPage() {
               <Upload className="h-5 w-5" />
               Import Data
             </CardTitle>
-            <CardDescription>Import transactions from CSV files or JSON backups</CardDescription>
+            <CardDescription>Import transactions from CSV, JSON, or SQL files</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="import-file">Select File</Label>
-              <Input id="import-file" type="file" accept=".csv,.json" onChange={handleFileUpload} />
-              <p className="text-sm text-muted-foreground">Supported formats: CSV, JSON</p>
+              <Input id="import-file" type="file" accept=".csv,.json,.sql" onChange={handleFileUpload} />
+              <p className="text-sm text-muted-foreground">Supported formats: CSV, JSON, SQL</p>
             </div>
 
             {importFile && (
@@ -563,13 +1095,11 @@ export default function ImportExportPage() {
             </Button>
 
             <div className="space-y-2">
-              <h4 className="font-medium">CSV Format Requirements:</h4>
+              <h4 className="font-medium">Supported Import Formats:</h4>
               <ul className="text-sm text-muted-foreground space-y-1">
-                <li>• <strong>date</strong> (YYYY-MM-DD format)</li>
-                <li>• <strong>description</strong> (transaction description)</li>
-                <li>• <strong>amount</strong> (positive for income, negative for expenses)</li>
-                <li>• <strong>category</strong> (optional, defaults to "Other")</li>
-                <li>• <strong>subcategory</strong> (optional)</li>
+                <li>• <strong>CSV:</strong> date, description, amount, category, subcategory</li>
+                <li>• <strong>JSON:</strong> Complete Money Manager backup files</li>
+                <li>• <strong>SQL:</strong> Database scripts exported from Money Manager</li>
               </ul>
             </div>
           </CardContent>
@@ -596,6 +1126,7 @@ export default function ImportExportPage() {
                   <SelectItem value="json">JSON (Complete Backup)</SelectItem>
                   <SelectItem value="xlsx">Excel Compatible CSV</SelectItem>
                   <SelectItem value="sql">SQL Database Script</SelectItem>
+                  <SelectItem value="pdf">PDF Report</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -654,7 +1185,7 @@ export default function ImportExportPage() {
           <CardDescription>Common import/export tasks</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-5">
             <Button 
               variant="outline" 
               className="h-auto p-4 flex flex-col items-center gap-2 bg-transparent"
@@ -718,6 +1249,22 @@ export default function ImportExportPage() {
               <div className="text-center">
                 <p className="font-medium">SQL Database</p>
                 <p className="text-sm text-muted-foreground">Complete .sql script</p>
+              </div>
+            </Button>
+
+            <Button 
+              variant="outline" 
+              className="h-auto p-4 flex flex-col items-center gap-2 bg-transparent"
+              onClick={() => {
+                setExportDataType("all")
+                setExportFormat("pdf")
+                handleExport()
+              }}
+            >
+              <FileImage className="h-6 w-6" />
+              <div className="text-center">
+                <p className="font-medium">PDF Report</p>
+                <p className="text-sm text-muted-foreground">Professional report</p>
               </div>
             </Button>
           </div>
